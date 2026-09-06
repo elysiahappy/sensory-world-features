@@ -1,0 +1,55 @@
+# 周六烟火大会 —— 每周六 20:00 触发
+# 花火（sparkle）主办，全城汇聚，波浪式分片避免 LLM 并发尖峰
+
+event_id: "fireworks_night"
+name: "周六烟火大会"
+event_type: "gathering"
+
+trigger:
+  trigger_type: "cron"
+  day_of_week: [5]   # 5 = 周六（0=周一）
+  hour: 20
+  minute: 0
+
+main_venue: "plaza"   # 主舞台：广场
+
+# 分片场地 —— 波浪式分散 NPC，严禁所有人同时进入同一群聊
+slices:
+  - slice_id: "main_stage"
+    location: "plaza"
+    display_name: "广场主舞台"
+    capacity: 10
+
+  - slice_id: "food_stalls"
+    location: "food_street"
+    display_name: "周边小吃摊"
+    capacity: 8
+
+  - slice_id: "riverside"
+    location: "riverside_walk"
+    display_name: "河堤观景区"
+    capacity: 8
+
+  - slice_id: "rooftop"
+    location: "old_building_rooftop"
+    display_name: "屋顶观景点"
+    capacity: 6
+
+# 参与规则
+participation:
+  required_npcs:
+    - "sparkle"       # 花火：主办/表演者，必须到场
+  optional_npcs:
+    - "robin"         # 知更鸟：可能来唱歌助兴
+    - "eden"          # 伊甸：可能和知更鸟二重唱
+    - "bronya"        # 布洛妮娅：小吃摊常客
+    - "violet"        # 薇尔莉特：可能会记录场景
+  resident_probability: 0.5   # 普通居民 50% 概率汇聚
+
+# 时间与并发参数
+duration_minutes: 90          # 烟火大会持续 90 分钟
+pre_notice_minutes: 20        # 提前 20 分钟预告
+chatter_boost: 0.3            # 事件期间私语概率 +30%
+chatter_topic_hint: "烟火大会的见闻、花火的表演、小吃的味道、夜空的美景"
+
+enabled: true

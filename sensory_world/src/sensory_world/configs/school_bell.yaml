@@ -1,0 +1,59 @@
+# 学园上课铃 —— 工作日 8:00 触发
+# 德丽莎（theresa）学园长主持，学生格蕾修（griseo）、铃（rin）、三月七（march7th）到校
+# 包含逃课事件链：逃课学生溜到游戏厅，学园长巡查触发"一窝端"喜剧事件
+
+event_id: "school_bell"
+name: "学园上课铃"
+event_type: "scene"
+
+trigger:
+  trigger_type: "cron"
+  day_of_week: [0, 1, 2, 3, 4]   # 周一到周五
+  hour: 8
+  minute: 0
+
+main_venue: "academy_classroom"   # 学园教室
+
+slices:
+  - slice_id: "classroom"
+    location: "academy_classroom"
+    display_name: "学园教室"
+    capacity: 8
+
+  - slice_id: "playground"
+    location: "academy_playground"
+    display_name: "学园操场"
+    capacity: 5
+
+  # 逃课目的地 —— 游戏厅（布洛妮娅的地盘）
+  - slice_id: "game_center"
+    location: "shop_game_center"
+    display_name: "游戏厅"
+    capacity: 4
+
+participation:
+  required_npcs:
+    - "theresa"      # 德丽莎学园长：必须到校
+    - "griseo"       # 格蕾修：学生
+    - "rin"          # 铃：学生
+    - "march7th"     # 三月七：学生
+  optional_npcs:
+    - "bronya"       # 布洛妮娅：游戏厅老板，逃课学生在这里
+  resident_probability: 0.0   # 普通居民不参与学园事件
+
+# 逃课事件链配置
+# 每个学生有独立的逃课概率，逃课后前往 game_center
+# 学园长巡查时触发"一窝端"喜剧 group_scene
+truant_config:
+  enabled: true
+  truant_probability: 0.25        # 每个学生 25% 概率逃课
+  truant_destination: "shop_game_center"
+  patrol_delay_minutes: 30        # 上课 30 分钟后学园长巡查
+  patrol_discovery_probability: 0.7  # 巡查发现概率 70%
+
+duration_minutes: 120             # 一节课 120 分钟（游戏内）
+pre_notice_minutes: 5             # 上课铃前 5 分钟提醒
+chatter_boost: 0.1
+chatter_topic_hint: "课堂上的趣事、学园生活、逃课的经历"
+
+enabled: true

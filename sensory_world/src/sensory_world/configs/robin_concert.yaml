@@ -1,0 +1,45 @@
+# 每晚演唱会 —— 每日 20:00 触发
+# 知更鸟（robin）固定开场，伊甸（eden）偶尔二重唱
+# 规模较小：广场 + 周边 2-3 分片
+
+event_id: "robin_concert"
+name: "每晚演唱会"
+event_type: "scene"
+
+trigger:
+  trigger_type: "daily"
+  hour: 20
+  minute: 0
+
+main_venue: "plaza_stage"   # 广场舞台
+
+slices:
+  - slice_id: "concert_main"
+    location: "plaza_stage"
+    display_name: "广场舞台"
+    capacity: 6
+
+  - slice_id: "concert_side"
+    location: "plaza_bench"
+    display_name: "广场长椅区"
+    capacity: 5
+
+  - slice_id: "concert_nearby"
+    location: "cafe_terrace"
+    display_name: "咖啡馆露台"
+    capacity: 4
+
+participation:
+  required_npcs:
+    - "robin"         # 知更鸟：固定演唱
+  optional_npcs:
+    - "eden"          # 伊甸：偶尔二重唱（由日程概率决定）
+    - "sparkle"       # 花火：偶尔来捧场
+  resident_probability: 0.2   # 普通居民 20% 概率来听
+
+duration_minutes: 45
+pre_notice_minutes: 10
+chatter_boost: 0.15
+chatter_topic_hint: "知更鸟的歌声、今天的曲目、音乐带来的感受"
+
+enabled: true
