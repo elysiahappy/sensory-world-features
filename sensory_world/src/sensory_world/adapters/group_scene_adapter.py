@@ -5,9 +5,16 @@ RealGroupSceneAdapter + RealChatterAdapter。
   - 群聊由系统按 NPC **实时位置自动聚类**形成，每群 ≤ 5 人，每 tick 全局 ≤ 3 条台词；
   - **没有**"指定参与者+话题"的定向开群 API。
 因此本适配器**不调用任何开群方法**，而是：
-  1. 把事件参与者**移动到分片地点**（显式移动命令，见 schedule 适配注入的回调）；
+  1. 把事件参与者**移动到分片地点**（通过 event_bus 发布 schedule.npc_command 事件）；
   2. 主项目下一次 GroupSceneSystem.tick 即会把同地点的 NPC 自动聚成小群；
   3. 用"波浪状态机"控制节奏：每片 ≤5 人、同时分片群 ≤6、每 2~3 游戏分钟放一批。
+
+事件聚集移动机制（补充事实）：
+  主项目通过事件总线广播移动命令：
+    event_bus.publish("schedule.npc_command", payload)
+  payload 字段：npc_id、target_location（地点 ID）、anchor_id、activity（自由字符串）、
+  lateness_policy、schedule_condition。下游 Body 层/寻路系统监听该事件执行实际移动
+  （simulation_loop.py T2 t2_schedule L599-643 即此机制）。
 
 闲聊 chatter 勘测事实：**无公开强制触发/话题注入 API**，话题偏置只能靠记忆正文
 （零侵入）。故 RealChatterAdapter 通过给相关 NPC 写入"含事件名/话题"的高信度
@@ -19,7 +26,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, Protocol, runtime_checkable
 
 from ..protocols import GroupSceneProtocol
 from .constants import (
@@ -30,8 +37,12 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
-# 移动命令类型：async def move(npc_id, location_id, reason="") -> None
-MoveFn = Callable[[str, str, str], Awaitable[None]]
+
+@runtime_checkable
+class HostEventBus(Protocol):
+    """主项目事件总线形状（鸭子类型）。"""
+
+    def publish(self, event_name: str, payload: dict[str, Any]) -> Any: ...
 
 
 @dataclass
@@ -62,8 +73,9 @@ class RealGroupSceneAdapter:
     """
     用"移动调度成群"模拟定向 group_scene，并用波浪状态机限峰。
 
-    :param move_fn: 显式移动命令 async (npc_id, location_id, reason)。
-        ⚠️ 主项目移动 API 名称需集成方在启动时绑定（勘测未给出函数名）。
+    :param event_bus: 主项目事件总线。提供 publish(event_name, payload) 方法。
+        事件聚集移动通过 event_bus.publish("schedule.npc_command", payload) 执行。
+        无 event_bus 时移动命令降级为告警不崩。
     :param memory_adapter: 可选 RealMemoryAdapter，用于把话题写进参与者记忆正文。
     :param group_max_size: 单群人数上限（主项目自动聚类每群≤5）。
     :param max_active_groups: 同时活跃分片群上限（波浪窗口宽度，默认 6）。
@@ -72,13 +84,13 @@ class RealGroupSceneAdapter:
 
     def __init__(
         self,
-        move_fn: MoveFn | None = None,
+        event_bus: HostEventBus | None = None,
         memory_adapter: object | None = None,
         group_max_size: int = WAVE_GROUP_MAX_SIZE,
         max_active_groups: int = WAVE_MAX_ACTIVE_GROUPS,
         wave_interval_minutes: int = WAVE_INTERVAL_MINUTES_MIN,
     ) -> None:
-        self._move = move_fn
+        self._bus = event_bus
         self._memory = memory_adapter
         self._group_max = group_max_size
         self._max_active = max_active_groups
@@ -238,16 +250,28 @@ class RealGroupSceneAdapter:
         sl.released_at_minutes = now_minutes
 
     async def _move_npc(self, npc_id: str, location: str, reason: str) -> None:
-        """执行显式移动命令；未绑定移动函数则告警跳过（事件聚集将不生效）。"""
-        if self._move is None:
-            logger.warning("未绑定移动命令，无法聚集 NPC=%s 到 %s", npc_id, location)
+        """
+        执行显式移动命令：通过 event_bus 发布 schedule.npc_command 事件。
+
+        无 event_bus 时告警跳过（事件聚集将不生效）。
+        """
+        if self._bus is None:
+            logger.warning("未注入 event_bus，无法聚集 NPC=%s 到 %s", npc_id, location)
             return
+        payload = {
+            "npc_id": npc_id,
+            "target_location": location,
+            "anchor_id": location,
+            "activity": reason or "参加活动",
+            "lateness_policy": "catch_up",
+            "schedule_condition": {},
+        }
         try:
-            result = self._move(npc_id, location, reason)
+            result = self._bus.publish("schedule.npc_command", payload)
             if hasattr(result, "__await__"):
                 await result
         except Exception:  # noqa: BLE001
-            logger.warning("移动 NPC 失败 npc=%s loc=%s", npc_id, location, exc_info=True)
+            logger.warning("发布移动命令失败 npc=%s loc=%s", npc_id, location, exc_info=True)
 
 
 class RealChatterAdapter:

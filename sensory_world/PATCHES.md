@@ -63,9 +63,9 @@ memory_adapter = RealMemoryAdapter(self.memory_store, name_resolver=self._npc_na
 emotion_adapter = RealEmotionAdapter(self.emotion)
 schedule_adapter = RealScheduleAdapter(
     schedule_book=getattr(self, "schedule_book", None),
-    move_fn=self._move_npc,   # ⚠ 需主项目确认真实移动函数，见下
+    event_bus=self.event_bus,   # 主项目事件总线，发布 schedule.npc_command 事件
 )
-group_scene_adapter = RealGroupSceneAdapter(move_fn=self._move_npc, memory_adapter=memory_adapter)
+group_scene_adapter = RealGroupSceneAdapter(event_bus=self.event_bus, memory_adapter=memory_adapter)
 chatter_adapter = RealChatterAdapter(memory_adapter, emotion_adapter)
 diary_adapter = RealDiaryAdapter(world_diary=self.diary, clock_adapter=clock_adapter)
 llm = build_safe_llm()   # 默认打 127.0.0.1:8089，失败模板兜底
@@ -144,7 +144,7 @@ def add_event_entry(self, text: str, category: str = "event") -> None:
 
 | 接口 | 用途 | 现状 | 适配层处理 |
 |------|------|------|-----------|
-| NPC 移动函数 | 事件分片把参与者移到分片地点触发自动聚类 | 勘测确定"需显式移动"，函数名未给 | `move_fn` 注入，启动时绑定真实 API |
+| event_bus 事件总线 | 事件分片把参与者移到分片地点触发自动聚类 | 主项目通过 `event_bus.publish("schedule.npc_command", payload)` 广播移动命令 | `event_bus` 注入，发布标准 payload（npc_id/target_location/anchor_id/activity/lateness_policy/schedule_condition） |
 | WorldClock 边界回调注册器名 | on_new_hour/day/season/year | 事件名已知，注册器名待定 | 容错探测常见名，失败用轮询 `poll_boundaries()` 兜底 |
 | WorldDiary 公开写方法 | 写城市记事 | 不存在 | 方案 A 直接追加文件 / 方案 B 打补丁 |
 | ScheduleEntry 构造字段 | 写"翻看相册"等活动 | activity 自由字符串已知 | `entry_factory` 可选注入，否则传 dict |

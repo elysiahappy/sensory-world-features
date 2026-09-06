@@ -131,7 +131,9 @@ birthdays:
 按 `PATCHES.md`：
 1. 在主循环初始化处创建适配器 + 三大功能系统，挂到 `world.sensory_features`；
 2. 在 `core/simulation_loop.py` t7 挂钩桩（L793-794）调用，含 `MinuteThrottle(5)` 节流；
-3. 绑定真实 NPC 移动函数到 `move_fn`（**需主项目确认**，见 PATCHES.md）。
+3. 注入 `event_bus`（主项目事件总线，`publish(event_name, payload)` 方法）到
+   `RealGroupSceneAdapter` 和 `RealScheduleAdapter`。事件聚集移动通过
+   `event_bus.publish("schedule.npc_command", payload)` 执行，无需绑定私有 move_fn。
 
 LLM 接入：`build_safe_llm()` 默认打 `http://127.0.0.1:8089/v1/chat/completions`，
 模型 `Qwen3-8B`；失败自动重试 + 模板兜底，绝不抛异常打断模拟。
