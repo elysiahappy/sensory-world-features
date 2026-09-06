@@ -51,14 +51,28 @@ sensory_world/
 │           ├── calendar_system.py          # CityCalendar 主入口（历法/季节注释/生日链路/年度回声/开张协议）
 │           ├── config_loader.py            # calendar.yaml / birthdays.yaml 加载
 │           └── models.py                   # CityDate / Season / SeasonNote / Birthday / CalendarConfig / ShopOpening
+│       ├── adapters/                       # 阶段四：主项目（小爱世界）集成适配层
+│       │   ├── __init__.py                 # 导出全部 Real*Adapter
+│       │   ├── constants.py                # 并发默认值（信号量2/群≤5/片≤6/波浪2-3分/节流5分）
+│       │   ├── host_interfaces.py          # 主项目真实接口形状 Protocol（勘测事实，不 import 主项目）
+│       │   ├── clock_adapter.py            # RealClockAdapter（分钟换算/自维护周历/回调桥接/MinuteThrottle）
+│       │   ├── memory_adapter.py           # RealMemoryAdapter（_append_memory 高信度/共同记忆正文含人名/recall 异步包装）
+│       │   ├── emotion_adapter.py          # RealEmotionAdapter（全同步情绪方法 async 薄包装）
+│       │   ├── group_scene_adapter.py      # RealGroupSceneAdapter（移动调度成群+波浪状态机）/ RealChatterAdapter（话题走记忆正文）
+│       │   ├── diary_adapter.py            # RealDiaryAdapter（公开方法优先，否则追加 day-XXXX.md）
+│       │   ├── llm_adapter.py              # RealLLMAdapter（OpenAI 8089，urllib 零依赖，重试超时返空串）
+│       │   └── schedule_adapter.py         # RealScheduleAdapter（自由活动写入 + 显式移动聚集）
 │       └── configs/                        # YAML 配置（事件/邮差/相册/日历/生日）
 │           ├── fireworks_night.yaml ...    # 阶段一事件配置
 │           ├── postal.yaml / album.yaml    # 阶段二配置
 │           └── calendar.yaml / birthdays.yaml  # 阶段三配置
+├── PATCHES.md                              # 阶段四：主项目两个最小补丁（T7 挂钩 + WorldDiary 公开方法）
+├── DEPLOY.md                               # 阶段四：部署运维手册（文件清单/目录/开关/回滚/降级验证）
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py                         # pytest fixtures
-│   ├── mocks.py                            # Mock 实现（所有外部依赖）
+│   ├── mocks.py                            # Mock 实现（功能模块外部依赖）
+│   ├── adapter_fakes.py                    # 阶段四：主项目接口 mock（FakeWorldClock/FakeMemoryStore 等）
 │   ├── test_models.py                      # 数据模型测试
 │   ├── test_event_config.py                # 配置加载测试
 │   ├── test_concurrency_guard.py           # 并发护栏测试
@@ -70,7 +84,12 @@ sensory_world/
 │   ├── test_postal_system.py               # 邮差系统测试（阶段二，含贺卡接口）
 │   ├── test_album_system.py                # 相册系统测试（阶段二）
 │   ├── test_calendar_models.py             # 历法/季节/生日模型测试（阶段三）
-│   └── test_calendar_system.py             # 日历系统/生日链路/年度回声/开张协议测试（阶段三）
+│   ├── test_calendar_system.py             # 日历系统/生日链路/年度回声/开张协议测试（阶段三）
+│   ├── test_clock_adapter.py               # 时钟适配/周历/节流/边界回调测试（阶段四）
+│   ├── test_memory_adapter.py              # 记忆适配/共同记忆正文/召回包装测试（阶段四）
+│   ├── test_other_adapters.py              # 情绪/闲聊/日记适配测试（阶段四）
+│   ├── test_llm_adapter.py                 # LLM 适配/重试/降级测试（阶段四）
+│   └── test_group_schedule_adapter.py      # 波浪分片调度/日程移动测试（阶段四）
 └── data/                                   # 运行时数据目录（运行时自动生成）
     ├── postal/letters.jsonl                # 信件存档（append-only）
     └── album/photos.jsonl                  # 照片存档（append-only）
