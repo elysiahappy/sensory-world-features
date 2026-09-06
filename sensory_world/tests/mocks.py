@@ -178,6 +178,7 @@ class MockChatter:
 
     def __init__(self):
         self.chatter_history: list[dict[str, Any]] = []
+        self.topics: list[dict[str, Any]] = []
 
     async def trigger_chatter(
         self,
@@ -192,6 +193,14 @@ class MockChatter:
             "topic": topic,
             "boost_probability": boost_probability,
         })
+
+    async def trigger_topic(
+        self,
+        npc_id: str,
+        topic: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        self.topics.append({"npc_id": npc_id, "topic": topic, "context": context or {}})
 
 
 # ============================================================

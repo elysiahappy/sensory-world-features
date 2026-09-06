@@ -1,0 +1,59 @@
+# 邮差系统配置（PostalSystem）
+# 承载 NPC：薇尔莉特（violet）——代人写信、正在学习理解爱的代笔邮差
+
+# 整体开关
+enabled: true
+
+# 邮差 NPC
+postman_npc_id: violet
+
+# 信件持久化
+letters_file: data/postal/letters.jsonl
+
+# 城外信箱（特殊通道）——三条铁律
+outside:
+  # 【稀疏】外部寄信周配额（默认每周 3 封）
+  weekly_quota: 3
+  # 【稀疏】NPC 主动寄往城外的概率（必须有事件由头才会触发）
+  npc_reply_probability: 0.2
+  # 寄信人身份包装（严禁破墙词）
+  sender_display: 城外的朋友
+  # 城市传说文案关键词
+  legend_keywords:
+    - 守护这座城的人
+    - 城外的朋友
+    - 旧邮筒
+
+# 回信链路
+reply:
+  # 收信后回信窗口期（游戏内天数）
+  window_days: 5
+  # 窗口期内回信概率
+  probability: 0.4
+
+# 【不指令】内容审查
+content_check:
+  enabled: true
+  # 命令式指令模式（命中即拒收）
+  command_patterns:
+    - 去做
+    - 命令
+    - 必须给我
+    - 我要你
+    - 给我去
+    - 立刻
+    - 执行
+    - 按照我说
+    - 听从
+    - 服从
+  # 破墙词（城外信中严禁出现）
+  wall_break_words:
+    - 用户
+    - 管理员
+    - 造物主
+    - 玩家
+    - 开发者
+    - 系统
+    - 程序
+    - 游戏设定
+    - NPC

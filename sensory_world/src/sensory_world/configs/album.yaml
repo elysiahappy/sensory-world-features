@@ -1,0 +1,37 @@
+# 相册系统配置（PhotoAlbumSystem）
+# 承载 NPC：三月七（march7th）——用相机记录城市瞬间的少女
+
+# 整体开关
+enabled: true
+
+# 摄影 NPC
+photographer_npc_id: march7th
+
+# 照片持久化
+photos_file: data/album/photos.jsonl
+
+# 周期事件拍照（阶段一钩子）
+event_photos:
+  # 每个事件拍照张数范围
+  min: 1
+  max: 3
+  # 三月七在大事件现场拍照的概率
+  photographer_present_probability: 0.7
+
+# NPC 自发聚会拍照
+casual:
+  photo_probability: 0.5
+  min_participants: 3
+
+# 日常随机拍照（低频）
+daily:
+  photo_probability: 0.02
+  min_participants: 3
+
+# 翻看相册（日程钩子）
+browse:
+  # 翻看时触发回忆型私语的概率
+  recall_probability: 0.6
+
+# LLM 生成画面描述失败时使用模板兜底
+use_template_fallback: true

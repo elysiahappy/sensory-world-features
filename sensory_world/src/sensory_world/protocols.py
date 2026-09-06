@@ -215,6 +215,21 @@ class ChatterProtocol(Protocol):
         """
         ...
 
+    async def trigger_topic(
+        self,
+        npc_id: str,
+        topic: str,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        为单个 NPC 注入一个话题（用于回忆型私语、事件话题偏向等）。
+        需主项目确认：阶段二相册"翻看相册"回忆私语使用。
+        :param npc_id: NPC 标识
+        :param topic: 话题内容
+        :param context: 附加上下文（如 photo_id、memory_tags）
+        """
+        ...
+
 
 # ============================================================
 # NPC 日程协议
