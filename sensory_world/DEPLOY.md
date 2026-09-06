@@ -54,11 +54,11 @@ from features.sensory_world.adapters import RealClockAdapter, build_safe_llm  # 
 ### 2.1 数据目录（生产，JSONL 持久化）
 
 ```bash
-mkdir -p world/data/postal      # 信件存档 letters.jsonl
-mkdir -p world/data/album       # 照片存档 photos.jsonl
-mkdir -p world/data/events      # 事件运行态（可选）
-mkdir -p world/data/config      # 功能模块配置（YAML）
-mkdir -p world/data/diary       # 世界日记（主项目已有则复用）
+mkdir -p world/data/postal      # 信件存档 letters.jsonl（运行时数据）
+mkdir -p world/data/album       # 照片存档 photos.jsonl（运行时数据）
+mkdir -p world/data/events      # 事件运行时数据（事件实例/状态，运行时写入）
+mkdir -p world/data/config      # 功能模块配置文件（events/postal/calendar/birthdays.yaml）
+mkdir -p world/data/diary       # 世界日记（主项目已有则复用，勿清空）
 ```
 
 ### 2.2 配置文件（放 world/data/config/）

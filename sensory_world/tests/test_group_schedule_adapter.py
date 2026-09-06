@@ -7,6 +7,8 @@ event_bus 发布 schedule.npc_command 事件、日程活动写入。
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from sensory_world.adapters import (
@@ -122,6 +124,46 @@ async def test_wave_topic_injected_via_shared_memory():
     # 每个参与者都有一条含事件名的共同记忆
     assert any("演唱会" in r["text"] for r in store.stored.get("robin", []))
     assert any("演唱会" in r["text"] for r in store.stored.get("eden", []))
+
+
+@pytest.mark.asyncio
+async def test_wave_without_event_bus_safe(caplog):
+    """降级分支：未注入 event_bus 时波浪分片不崩、不发布事件、记录告警日志。
+
+    主项目无事件总线注入时，RealGroupSceneAdapter 应安全跳过移动命令，
+    只记录 warning 日志，事件系统其余流程（状态机推进）不受影响。
+    """
+    caplog.set_level(logging.WARNING, logger="sensory_world.adapters.group_scene_adapter")
+    # event_bus=None
+    adapter = RealGroupSceneAdapter(event_bus=None, group_max_size=5, max_active_groups=6)
+    # start_scene 不应抛异常
+    pid = await adapter.start_scene(
+        scene_id="nobus", location="square",
+        participant_ids=["a", "b", "c", "d"],
+        context={"event_name": "烟火大会", "current_game_minutes": 0},
+    )
+    assert pid is not None
+    plan = adapter._plans[pid]  # type: ignore[attr-defined]
+    # 分片仍被正常规划（状态机推进不受影响）
+    assert len(plan.slices) == 1
+    # 但没有发布任何移动事件（无 bus 可发）
+    assert plan.slices[0].released is True  # 状态机照常标记放出
+    # 产生了"未注入 event_bus"告警（每个 NPC 移动尝试都会告警一次）
+    warns = [r for r in caplog.records if r.levelno == logging.WARNING and "event_bus" in r.getMessage()]
+    assert len(warns) == 4  # 4 个 NPC 各告警一次
+    # advance_wave 同样不崩
+    await adapter.advance_wave(99)
+
+
+@pytest.mark.asyncio
+async def test_schedule_move_without_event_bus_logs_warning(caplog):
+    """降级分支：RealScheduleAdapter 无 bus 时返回 False 并记录告警，不抛异常。"""
+    caplog.set_level(logging.WARNING, logger="sensory_world.adapters.schedule_adapter")
+    adapter = RealScheduleAdapter(schedule_book=FakeScheduleBook(), event_bus=None)
+    ok = await adapter.move_to("robin", "square", reason="参加演唱会")
+    assert ok is False
+    warns = [r for r in caplog.records if r.levelno == logging.WARNING and "event_bus" in r.getMessage()]
+    assert len(warns) == 1
 
 
 @pytest.mark.asyncio
