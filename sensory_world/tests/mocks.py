@@ -248,6 +248,8 @@ class MockGameClock:
 
     def __init__(self, start_time: datetime | None = None):
         self._time = start_time or datetime(2024, 1, 6, 19, 0)  # 默认周六 19:00
+        # 城市纪元起点（total_days=0）
+        self._epoch = datetime(2024, 1, 1, 0, 0)
 
     async def now(self) -> datetime:
         return self._time
@@ -255,9 +257,17 @@ class MockGameClock:
     async def weekday(self) -> int:
         return self._time.weekday()
 
+    async def total_days(self) -> int:
+        """自城市纪元起点经过的整天数（第 1 天为 0）"""
+        return (self._time - self._epoch).days
+
     def advance(self, minutes: int = 1) -> None:
         """手动推进时间（测试用）"""
         self._time += timedelta(minutes=minutes)
+
+    def advance_days(self, days: int = 1) -> None:
+        """手动推进整天数（测试用）"""
+        self._time += timedelta(days=days)
 
     def set_time(self, dt: datetime) -> None:
         """手动设置时间（测试用）"""

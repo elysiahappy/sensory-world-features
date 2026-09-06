@@ -72,6 +72,16 @@ _MEMORY_RECEIVED_TEMPLATE = "收到了{sender}的信，信里说：{body_brief}"
 _MEMORY_SENT_TEMPLATE = "托邮差给{recipient}寄了一封信，说了说{reason}"
 _MEMORY_POSTMAN_TEMPLATE = "替{sender}把信送到了{recipient}手中"
 
+# 贺卡（生日/开业等）模板兜底
+_FALLBACK_CARD_BIRTHDAY = (
+    "亲爱的{recipient}：生日快乐！愿新的一岁里，这座城的每一天都为你温柔以待。"
+)
+_FALLBACK_CARD_OPENING = (
+    "亲爱的{recipient}：恭喜新店开张！愿店里人来人往，暖意长存。——城里的朋友们"
+)
+# 贺卡记忆模板
+_MEMORY_CARD_RECEIVED = "收到了一张贺卡：{body_brief}"
+
 
 class PostalSystem:
     """
@@ -634,6 +644,129 @@ class PostalSystem:
         if elapsed >= timedelta(days=7):
             self._mailbox.reset_quota(now)
             logger.info("城外信周配额已重置")
+
+    # ========================================================
+    # 6. 贺卡 / 邀请函（阶段三：生日贺卡、开业邀请函复用入口）
+    # ========================================================
+
+    async def send_greeting_card(
+        self,
+        recipient_id: str,
+        occasion: str,
+        reason: str,
+        sender_id: str = "city_friends",
+        event_ref: str = "",
+    ) -> Letter | None:
+        """
+        发送一张问候贺卡（生日 / 开业 / 节日等）。
+
+        贺卡与普通信件一样走邮差、进记忆库、可被日记/小说管线读取，
+        但寄信人可以是"城里的朋友们"（联名贺卡，sender_id="city_friends"），
+        适用于生日祝福、开业邀请等群体场合。
+
+        :param recipient_id: 收卡 NPC
+        :param occasion: 场合类型（"birthday" / "opening" / 其他）
+        :param reason: 贺卡缘由（如"三月七的生日"）
+        :param sender_id: 寄卡人，默认"城里的朋友们"
+        :param event_ref: 关联事件 ID
+        :return: 已送达的 Letter；失败返回 None
+        """
+        if not self._config.enabled:
+            return None
+
+        now = await self._clock.now()
+        recipient_display = self._display_name(recipient_id)
+
+        # 用 LLM 生成贺卡寄语，失败按场合模板兜底
+        body = await self._compose_card_body(recipient_id, occasion, reason)
+
+        letter = Letter(
+            direction=LetterDirection.NPC_TO_NPC,
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            postman_id=self._config.postman_npc_id,
+            subject=f"{occasion}:{reason}"[:20],
+            body=body,
+            reason=reason,
+            status=LetterStatus.DRAFT,
+            event_ref=event_ref,
+            created_at=now,
+            metadata={"card": True, "occasion": occasion},
+        )
+
+        # 贺卡同样过内容审查（不指令铁律）
+        if self._config.content_check_enabled:
+            check = self._checker.check(body)
+            if not check.passed:
+                letter.status = LetterStatus.REJECTED
+                letter.metadata["reject_reason"] = check.reason
+                await self._store.append(letter)
+                logger.warning("贺卡被拒收: →%s (%s)", recipient_id, check.reason)
+                return None
+
+        letter.status = LetterStatus.DELIVERED
+        letter.delivered_at = now
+
+        # 收卡人记忆（与普通信件同权重——平权）
+        await self._write_memory(
+            npc_id=recipient_id,
+            content=_MEMORY_CARD_RECEIVED.format(body_brief=self._brief(body)),
+            confidence=0.9,
+            tags=["card", occasion],
+            extra={"letter_id": letter.letter_id, "occasion": occasion, "card": True},
+            now=now,
+        )
+        # 邮差留投递记录
+        await self._write_memory(
+            npc_id=self._config.postman_npc_id,
+            content=f"替大家把一张{occasion}贺卡送到了{recipient_display}手中",
+            confidence=0.7,
+            tags=["card", "delivered"],
+            extra={"letter_id": letter.letter_id},
+            now=now,
+        )
+
+        # 世界日记（协议方法 write_entry(category, content, **metadata)）
+        if self._diary:
+            try:
+                await self._diary.write_entry(
+                    "postal_card",
+                    f"一张贺卡送到了{recipient_display}手上：邮差{self._config.postman_npc_id}送来贺卡——{self._brief(body, 60)}",
+                    title=f"一张贺卡送到了{recipient_display}手上",
+                    tags=["postal", "card", occasion],
+                )
+            except Exception as e:
+                logger.warning("写贺卡日记失败: %s", e)
+
+        await self._store.append(letter)
+        logger.info("贺卡已送达: →%s (%s)", recipient_id, occasion)
+        return letter
+
+    async def _compose_card_body(
+        self, recipient_id: str, occasion: str, reason: str
+    ) -> str:
+        """生成贺卡寄语，失败按场合模板兜底"""
+        recipient_display = self._display_name(recipient_id)
+        system_prompt = (
+            "你是薇尔莉特，一位代人写信的邮差。请代写一张简短温暖的贺卡寄语"
+            "（60字以内），只包含祝福与生活情感内容，不要出现任何命令或指令。"
+        )
+        user_prompt = f"收卡人：{recipient_display}\n场合：{reason}\n请写一段贺卡寄语。"
+        try:
+            body = await self._safe_llm.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ])
+            if body and body.strip():
+                return body.strip()
+        except Exception as e:
+            logger.warning("LLM 贺卡生成失败，模板兜底: %s", e)
+
+        if occasion == "birthday":
+            return _FALLBACK_CARD_BIRTHDAY.format(recipient=recipient_display)
+        if occasion == "opening":
+            return _FALLBACK_CARD_OPENING.format(recipient=recipient_display)
+        return f"亲爱的{recipient_display}：{reason}，愿你安好。——城里的朋友们"
 
     # ========================================================
     # 状态查询

@@ -348,3 +348,177 @@ python -m pytest tests/test_postal_system.py tests/test_album_system.py \
 ```
 
 阶段二新增 51 个测试，全项目累计 118 个测试全部可离线通过（LLM、记忆库、事件总线、chatter 全部 mock）。
+
+---
+
+# 阶段三：日历系统 CityCalendar + 新店开张协议
+
+## 模块结构
+
+```
+src/sensory_world/calendar/        # 日历系统
+├── calendar_system.py             # CityCalendar 主入口（历法/季节/生日/回声/开张）
+├── config_loader.py               # calendar.yaml / birthdays.yaml 加载
+└── models.py                      # CityDate / Season / SeasonNote / Birthday / CalendarConfig / ShopOpening
+
+src/sensory_world/configs/
+├── calendar.yaml                  # 日历/生日链路/回声/开张配置
+└── birthdays.yaml                 # 居民生日（month+day 或 day_of_year）
+```
+
+## 城市历法规则（游戏历法，自洽简单）
+
+- 城市纪元第 1 天 = 游戏累计天数 `total_days=0`（可配 `epoch_start_total_day`）；
+- 周 = 7 天，月 = 30 天，季 = 90 天，年 = 360 天；
+- 季节：春（day 1~90）、夏（91~180）、秋（181~270）、冬（271~360）；
+- **需主项目确认**：`GameClock.total_days()` —— 现有时间系统若无此接口，可用 `(now - epoch).days` 推导。已在协议中补充声明。
+
+## 快速接入
+
+```python
+from sensory_world.calendar import CityCalendar, CalendarConfig
+
+calendar = CityCalendar(
+    clock=game_clock,
+    memory=npc_memory_store,    # 生日亲近NPC/年度回声召回用（可选）
+    diary=world_diary,          # 可选
+    chatter=chatter_system,     # 生日祝福/年度回声私语用（可选）
+    group_scene=group_scene,    # 开张首日群聊用（可选）
+    postal=postal_system,       # 阶段二邮差（生日贺卡/开业邀请函）
+    album=album_system,         # 阶段二相册（生日合照/开张首照）
+    config=CalendarConfig(),
+    birthdays=...,              # 或用 from_config 读 YAML
+)
+# 推荐：直接从配置文件构造
+calendar = CityCalendar.from_config(
+    clock=game_clock,
+    calendar_config_path="src/sensory_world/configs/calendar.yaml",
+    birthdays_config_path="src/sensory_world/configs/birthdays.yaml",
+    memory=..., diary=..., chatter=..., group_scene=...,
+    postal=postal, album=album,
+)
+await calendar.initialize()
+```
+
+## 挂钩点
+
+| 触发场景 | 调用方式 | 说明 |
+|---------|---------|------|
+| 主循环每 tick | `await calendar.tick(game_time)` | 跨天时推进历法、处理当日生日/新年 |
+| 季节注释 | `calendar.season_note` / `calendar.get_season_hint_text()` | 供事件系统与 chatter 读取天气倾向与行为注释（夏季傍晚出门/冬季室内） |
+| **年度回声**（衔接阶段一） | `await calendar.on_periodic_event_start(event_name, participant_ids)` | 周期事件**启动时**调用；第 2 年起召回去年同期记忆注入私语话题 |
+| **新店开张** | `await calendar.register_new_shop(npc_id, shop_location, shop_type, visitor_ids)` | 标准化开张流程 |
+| 运行期补生日 | `calendar.add_birthday(npc_id, day_of_year)` | 新 NPC 入住时补充 |
+
+### 生日联动链路（当天自动触发，复用阶段二）
+
+1. **邮差最先得知**：`PostalSystem.send_greeting_card(occasion="birthday")` 联名贺卡（"城里的朋友们"），进记忆同权重 0.9；
+2. **相册生日合照**：`PhotoAlbumSystem.on_birthday(npc_id, year)` 给在场者写共同记忆；
+3. **亲近 NPC 祝福私语**：从寿星记忆 `co_present`/共同在场者召回好友，`chatter.trigger_topic` 注入祝福话题；
+4. **世界日记**：`write_entry("calendar", ...)` 记录生日条目。
+
+> 亲近 NPC 名单依赖记忆 metadata 中的 `co_present` / `participant_ids` / `with_npcs` 字段（相册共同记忆已写 `co_present`）。**需主项目确认**记忆 metadata 结构；取不到则静默跳过祝福私语。
+
+### 年度回声
+
+- 仅城市纪元第 2 年起生效（第 1 年无"去年"）；
+- 事件启动时对参与者 `memory.recall(npc, "去年 {事件名} 活动 合影")`，命中含事件名/"合影"的记忆则注入话题："去年{事件}的时候——……，今年又到了，和 XX 聊聊去年吧"；
+- 无记忆静默跳过，不报错；话题数受 `echo_max_topics` 限制。
+
+### 新店开张协议流程
+
+`register_new_shop(npc_id, shop_location, shop_type, visitor_ids)`：
+
+1. 世界日记开张条目（店铺类型中文名，如"邮差小屋"）；
+2. 周边 NPC 首日造访 `group_scene.start_scene(...)`；
+3. 摄影 NPC 首张店铺照片 `album.on_new_shop(...)`（给在场者写共同记忆）；
+4. 邮差发开业邀请函 `postal.send_greeting_card(occasion="opening", sender_id=店主)`；
+5. 同地点防重复注册；返回 `ShopOpening` 记录。
+
+**地点注册**：开张记录 `ShopOpening.to_dict()` 含 `shop_location` / `shop_type`，**需主项目确认**与 `data/city_locations_all.json` 的地点注册格式对接（本模块只产出记录，不直接改地点文件）。
+
+## 邮差/相册新增接口（阶段三复用，非新模块）
+
+| 接口 | 模块 | 用途 |
+|------|------|------|
+| `postal.send_greeting_card(recipient_id, occasion, reason, sender_id)` | 邮差 | 生日贺卡/开业邀请函；`occasion="birthday"/"opening"`；联名贺卡 sender 用 `city_friends` |
+| `album.on_birthday(npc_id, year, location, participant_ids)` | 相册 | 生日合照 |
+| `album.on_new_shop(npc_id, shop_location, shop_type, visitor_ids)` | 相册 | 开张首照 |
+
+贺卡同样过内容审查（不指令铁律）、进 `letters.jsonl`（`metadata.card=true`）、记忆同权重。
+
+## 配置项（CalendarConfig）
+
+| 配置 | 默认值 | 说明 |
+|------|--------|------|
+| `enabled` | `True` | 日历总开关 |
+| `epoch_start_total_day` | `0` | 城市纪元起点对应游戏累计天数 |
+| `birthday_enabled` | `True` | 生日链路开关 |
+| `birthday_card_probability` | `0.9` | 生日贺卡概率 |
+| `birthday_photo_probability` | `0.85` | 生日合照概率 |
+| `birthday_greeting_chatter_probability` | `0.7` | 祝福私语概率 |
+| `echo_enabled` | `True` | 年度回声开关 |
+| `echo_memory_per_npc` / `echo_max_topics` | `2` / `3` | 回声召回条数/话题上限 |
+| `new_shop_enabled` | `True` | 开张协议开关 |
+| `new_shop_visitor_count` | `5` | 首日造访群聊人数 |
+| `new_shop_photo_probability` | `0.95` | 开张首照概率 |
+| `new_shop_invitation_probability` / `_max` | `0.8` / `6` | 邀请函概率/上限 |
+| `shop_type_names` | 见 yaml | 店铺类型中文名映射 |
+
+## 降级行为
+
+- 下游系统（邮差/相册/chatter/群聊/日记/记忆）全部可选注入，缺失或抛异常时对应步骤静默跳过，不影响历法推进与其他链路；
+- LLM 不被日历直接调用（贺卡/照片文案由邮差/相册内部 LLM + 模板兜底）；
+- 系统禁用时 `tick`/`register_new_shop` 返回 None/空，不产生数据。
+
+---
+
+# 三系统统一集成：总挂钩顺序建议
+
+主循环一个 tick 内，推荐按以下顺序挂钩（全部 `await`，各自独立降级）：
+
+```
+每个游戏 tick（game_time）:
+│
+├─ 1. 【日历】calendar.tick(game_time)
+│      · 跨天时推进城市历法、切换季节注释
+│      · 当天生日 → 内部触发 邮差贺卡 + 相册合照 + 祝福私语 + 日记
+│
+├─ 2. 【周期事件】event_system.tick(game_time)
+│      · 事件 PRE：日记预告 + 情绪期待注入
+│      · 事件启动时 ──→ calendar.on_periodic_event_start(事件名, 参与者)   # 年度回声
+│      · 事件 ACTIVE（分片拉起 group_scene，受并发护栏限制）:
+│      │     每个分片群聊后 ──→ album.on_event_photos(...)                 # 事件拍照
+│      │     事件大场面后   ──→ postal.on_event_occurred(...)              # 事件由头→城外信
+│      · 事件 POST：摘要日记 + 参与者共同记忆 + LLM 印象（模板兜底）
+│
+├─ 3. 【邮差】postal 日常
+│      · 处理窗口期回信 maybe_reply()
+│      · 城外信箱：外部轮询 receive_outside_letter() / collect_outbox()
+│
+├─ 4. 【相册】album 日常
+│      · maybe_daily_photo()（低频）
+│      · NPC 日程"翻看相册" → browse_album()（回忆私语）
+│
+└─ 5. chatter / 情绪 / 记忆 RAG（现有系统）
+       · 季节旁白：calendar.get_season_hint_text() 可注入 chatter 话题倾向
+
+一次性事件（非 tick）:
+· 新 NPC 带店铺入住 → calendar.register_new_shop(npc_id, location, shop_type, visitors)
+· 外部投信       → postal.receive_outside_letter(recipient_id, content, subject)
+```
+
+**关键衔接关系**：
+- 日历是"时间刻度"，最先 tick，决定季节与当天生日；
+- 周期事件是"大场面"，启动时向日历要回声、进行中向相册要照片、结束后向邮差给由头；
+- 邮差与相册是"物证层"，被日历（生日/开张）与事件（现场）共同调用，不主动驱动剧情；
+- 共同记忆（相册 `co_present`）是跨系统的记忆交集底座，被年度回声与祝福私语复用。
+
+## 阶段三测试
+
+```bash
+cd sensory_world
+python -m pytest tests/test_calendar_models.py tests/test_calendar_system.py -v
+```
+
+阶段三新增 29 个测试（历法/季节/生日链路/年度回声/开张协议 + 贺卡接口），全项目累计 **147 个测试全部可离线通过**。

@@ -244,6 +244,72 @@ class PhotoAlbumSystem:
         )
 
     # ========================================================
+    # 3.5 特殊场合：生日合照 / 新店开张首照（阶段三日历系统复用）
+    # ========================================================
+
+    async def on_birthday(
+        self,
+        npc_id: str,
+        year: int,
+        location: str = "square",
+        participant_ids: list[str] | None = None,
+    ) -> Photo | None:
+        """
+        生日合照钩子（由日历系统生日链路调用）。
+
+        :param npc_id: 过生日的 NPC
+        :param year: 城市纪元年份
+        :param location: 合照地点（默认广场；主项目可传实际聚会地点）
+        :param participant_ids: 在场名单；不传则由摄影 NPC 与寿星组成
+        """
+        if not self._config.enabled:
+            return None
+        photographer = self._config.photographer_npc_id
+        participants = list(dict.fromkeys(
+            [photographer, npc_id, *(participant_ids or [])]
+        ))
+        now = await self._clock.now()
+        return await self._take_photo(
+            now=now,
+            location=location,
+            scene_type=PhotoSceneType.BIRTHDAY,
+            event_name=f"{npc_id}的生日",
+            event_ref=f"birthday:{npc_id}:{year}",
+            participants=participants,
+        )
+
+    async def on_new_shop(
+        self,
+        npc_id: str,
+        shop_location: str,
+        shop_type: str,
+        visitor_ids: list[str] | None = None,
+    ) -> Photo | None:
+        """
+        新店开张首张店铺照片钩子（由日历系统开张协议调用）。
+
+        :param npc_id: 店主 NPC
+        :param shop_location: 店铺地点 ID
+        :param shop_type: 店铺类型中文名（如"书店"）
+        :param visitor_ids: 首日造访 NPC 名单
+        """
+        if not self._config.enabled:
+            return None
+        photographer = self._config.photographer_npc_id
+        participants = list(dict.fromkeys(
+            [photographer, npc_id, *(visitor_ids or [])]
+        ))
+        now = await self._clock.now()
+        return await self._take_photo(
+            now=now,
+            location=shop_location,
+            scene_type=PhotoSceneType.NEW_SHOP,
+            event_name=f"{npc_id}的{shop_type}开张",
+            event_ref=f"new_shop:{shop_location}",
+            participants=participants,
+        )
+
+    # ========================================================
     # 4. 翻看相册（日程钩子）—— 触发回忆型私语
     # ========================================================
 

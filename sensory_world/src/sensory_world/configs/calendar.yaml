@@ -1,0 +1,44 @@
+# 城市历法系统配置（CityCalendar）
+# 城市纪元：在现有游戏时间之上叠加的一层城市历法，记录第 N 天/周/月/季/年。
+
+enabled: true
+# 城市纪元起始：游戏累计天数 total_days=0 对应城市纪元第几天（默认第 1 天）
+epoch_start_total_day: 0
+
+# ---- 生日链路 ----
+birthday_enabled: true
+# 邮差最先得知：生日贺卡概率
+birthday_card_probability: 0.9
+# 生日合照概率（三月七）
+birthday_photo_probability: 0.85
+# 亲近 NPC 祝福私语概率
+birthday_greeting_chatter_probability: 0.7
+# 每场生日祝福私语最多触发的亲近 NPC 数
+birthday_greeting_max_npcs: 4
+
+# ---- 年度回声 ----
+echo_enabled: true
+# 年度回声每个参与者召回的最大记忆条数
+echo_memory_per_npc: 2
+# 年度回声最多注入的私语话题数
+echo_max_topics: 3
+
+# ---- 新店开张 ----
+new_shop_enabled: true
+# 开张首日造访 group_scene 的周边 NPC 数（不含店主）
+new_shop_visitor_count: 5
+# 首张店铺照片概率
+new_shop_photo_probability: 0.95
+# 开业邀请函概率
+new_shop_invitation_probability: 0.8
+# 邀请函最多发送给多少 NPC
+new_shop_invitation_max: 6
+
+# 店铺类型中文名映射
+shop_type_names:
+  bookstore: 书店
+  bakery: 点心铺
+  restaurant: 餐馆
+  post_office: 邮差小屋
+  cafe: 咖啡馆
+  flower_shop: 花店

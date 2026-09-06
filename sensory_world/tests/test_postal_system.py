@@ -323,3 +323,62 @@ async def test_llm_failure_fallback(tmp_path):
     assert letter is not None
     assert letter.status == LetterStatus.DELIVERED
     assert letter.body  # 模板兜底正文
+
+
+# ============================================================
+# 贺卡 / 邀请函（阶段三日历复用）
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_send_birthday_card(tmp_path: Path):
+    """生日贺卡：联名贺卡送达、进记忆、落库、同权重"""
+    mem = MockNPCMemoryStore()
+    diary = MockWorldDiary()
+    system = PostalSystem(
+        llm=MockLLMClient(),
+        memory=mem,
+        clock=MockGameClock(datetime(2026, 3, 7, 9, 0)),
+        diary=diary,
+        config=PostalConfig(letters_file=str(tmp_path / "cards.jsonl")),
+    )
+    await system.initialize()
+
+    card = await system.send_greeting_card(
+        recipient_id="march7th",
+        occasion="birthday",
+        reason="march7th的生日",
+        sender_id="city_friends",
+    )
+    assert card is not None
+    assert card.status == LetterStatus.DELIVERED
+    assert card.metadata.get("card") is True
+    # 收卡人记忆（同权重 0.9）
+    mems = mem.get_all_entries("march7th")
+    received = [m for m in mems if "card" in m.tags or "birthday" in m.tags]
+    assert received and received[0].confidence == 0.9
+    # 日记记录
+    assert any("贺卡" in e["content"] for e in diary.entries)
+    # 落库
+    letters = await system.get_letters_for_npc("march7th")
+    assert any(l.letter_id == card.letter_id for l in letters)
+
+
+@pytest.mark.asyncio
+async def test_send_opening_invitation(tmp_path: Path):
+    """开业邀请函：店主署名发给访客"""
+    system = PostalSystem(
+        llm=MockLLMClient(),
+        memory=MockNPCMemoryStore(),
+        clock=MockGameClock(),
+        config=PostalConfig(letters_file=str(tmp_path / "inv.jsonl")),
+    )
+    await system.initialize()
+    card = await system.send_greeting_card(
+        recipient_id="robin",
+        occasion="opening",
+        reason="violet的邮差小屋开张了",
+        sender_id="violet",
+    )
+    assert card is not None
+    assert card.status == LetterStatus.DELIVERED
+    assert card.sender_id == "violet"
